@@ -1,0 +1,53 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKERHUB_CREDENTIALS = 'dockerhub-creds'
+        MINIKUBE_SSH_CREDENTIALS = 'minikube-ssh'
+        DOCKER_IMAGE = 'discoverdevops/aws-devops-demo'
+        K8S_NAMESPACE = 'default'
+        MINIKUBE_PRIVATE_IP = '10.0.11.158'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'develop', url: 'https://github.com/your-org/your-repo.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    def tag = env.BUILD_NUMBER
+                    sh "docker build -t ${DOCKER_IMAGE}:${tag} ."
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: DOCKERHUB_CREDENTIALS, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    script {
+                        def tag = env.BUILD_NUMBER
+                        sh "echo \"\$DOCKER_PASS\" | docker login -u \"\$DOCKER_USER\" --password-stdin"
+                        sh "docker push ${DOCKER_IMAGE}:${tag}"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Minikube via SSH') {
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: MINIKUBE_SSH_CREDENTIALS, keyVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
+                    script {
+                        def tag = env.BUILD_NUMBER
+                        sh ""
+                        sh "ssh -i \"\$SSH_KEY\" -o StrictHostKeyChecking=no \"\$SSH_USER@${MINIKUBE_PRIVATE_IP}\" 'sudo kubectl set image deployment/aws-devops-demo aws-devops-demo=${DOCKER_IMAGE}:${tag} -n ${K8S_NAMESPACE}'"
+                        sh "ssh -i \"\$SSH_KEY\" -o StrictHostKeyChecking=no \"\$SSH_USER@${MINIKUBE_PRIVATE_IP}\" 'sudo kubectl rollout status deployment/aws-devops-demo -n ${K8S_NAMESPACE}'"
+                    }
+                }
+            }
+        }
+    }
+}
