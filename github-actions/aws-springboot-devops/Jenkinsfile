@@ -42,7 +42,6 @@ pipeline {
                 withCredentials([sshUserPrivateKey(credentialsId: MINIKUBE_SSH_CREDENTIALS, keyVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
                     script {
                         def tag = env.BUILD_NUMBER
-                        sh ""
                         sh "ssh -i \"\$SSH_KEY\" -o StrictHostKeyChecking=no \"\$SSH_USER@${MINIKUBE_PRIVATE_IP}\" 'sudo kubectl set image deployment/aws-devops-demo aws-devops-demo=${DOCKER_IMAGE}:${tag} -n ${K8S_NAMESPACE}'"
                         sh "ssh -i \"\$SSH_KEY\" -o StrictHostKeyChecking=no \"\$SSH_USER@${MINIKUBE_PRIVATE_IP}\" 'sudo kubectl rollout status deployment/aws-devops-demo -n ${K8S_NAMESPACE}'"
                     }
