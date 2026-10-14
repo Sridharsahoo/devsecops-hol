@@ -3,16 +3,16 @@ pipeline {
 
     environment {
         DOCKERHUB_CREDENTIALS = 'dockerhub-creds'
-        MINIKUBE_SSH_CREDENTIALS = 'minikube-ssh'
-        DOCKER_IMAGE = 'discoverdevops/aws-devops-demo'
+        MINIKUBE_SSH_CREDENTIALS = 'minikube-ssh-creds'
+        DOCKER_IMAGE = 'Sridharsahoo/aws-devops-demo'
         K8S_NAMESPACE = 'default'
-        MINIKUBE_PRIVATE_IP = '10.0.11.158'
+        MINIKUBE_PRIVATE_IP = '172.31.10.111'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'develop', url: 'https://github.com/your-org/your-repo.git'
+                git branch: 'main', url: 'https://github.com/Sridharsahoo/devsecops-hol.git'
             }
         }
 
