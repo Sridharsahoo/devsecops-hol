@@ -1,52 +1,121 @@
+
 pipeline {
     agent any
 
     environment {
         DOCKERHUB_CREDENTIALS = 'dockerhub-creds'
         MINIKUBE_SSH_CREDENTIALS = 'minikube-ssh-creds'
-        DOCKER_IMAGE = 'Sridharsahoo/aws-devops-demo'
+
+        // Docker image repository names must be lowercase.
+        DOCKER_IMAGE = 'sridharsahoo/aws-devops-demo'
+
         K8S_NAMESPACE = 'default'
         MINIKUBE_PRIVATE_IP = '172.31.10.111'
+        PROJECT_DIR = 'github-actions/aws-springboot-devops'
     }
 
     stages {
-        stage('Checkout') {
+        // Jenkins automatically checks out the repository because
+        // this job uses "Pipeline script from SCM".
+
+        stage('Verify Source Files') {
             steps {
-                git branch: 'main', url: 'https://github.com/Sridharsahoo/devsecops-hol.git'
+                dir("${PROJECT_DIR}") {
+                    sh '''
+                        set -eu
+                        echo "Checking project files..."
+                        test -f Dockerfile
+                        test -d k8s
+                        ls -la
+                        ls -la k8s
+                    '''
+                }
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    def tag = env.BUILD_NUMBER
-                    sh "docker build -t ${DOCKER_IMAGE}:${tag} ."
+                dir("${PROJECT_DIR}") {
+                    sh '''
+                        set -eu
+                        docker build \
+                          -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
+                    '''
                 }
             }
         }
 
         stage('Push to Docker Hub') {
             steps {
-                withCredentials([usernamePassword(credentialsId: DOCKERHUB_CREDENTIALS, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    script {
-                        def tag = env.BUILD_NUMBER
-                        sh "echo \"\$DOCKER_PASS\" | docker login -u \"\$DOCKER_USER\" --password-stdin"
-                        sh "docker push ${DOCKER_IMAGE}:${tag}"
-                    }
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: "${DOCKERHUB_CREDENTIALS}",
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
+                        set +x
+
+                        echo "$DOCKER_PASS" |
+                          docker login \
+                            --username "$DOCKER_USER" \
+                            --password-stdin
+
+                        docker push "${DOCKER_IMAGE}:${BUILD_NUMBER}"
+
+                        docker logout
+                    '''
                 }
             }
         }
 
         stage('Deploy to Minikube via SSH') {
             steps {
-                withCredentials([sshUserPrivateKey(credentialsId: MINIKUBE_SSH_CREDENTIALS, keyVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
-                    script {
-                        def tag = env.BUILD_NUMBER
-                        sh "ssh -i \"\$SSH_KEY\" -o StrictHostKeyChecking=no \"\$SSH_USER@${MINIKUBE_PRIVATE_IP}\" 'sudo kubectl set image deployment/aws-devops-demo aws-devops-demo=${DOCKER_IMAGE}:${tag} -n ${K8S_NAMESPACE}'"
-                        sh "ssh -i \"\$SSH_KEY\" -o StrictHostKeyChecking=no \"\$SSH_USER@${MINIKUBE_PRIVATE_IP}\" 'sudo kubectl rollout status deployment/aws-devops-demo -n ${K8S_NAMESPACE}'"
-                    }
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: "${MINIKUBE_SSH_CREDENTIALS}",
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
+
+                        SSH_OPTS="-i $SSH_KEY \
+                          -o BatchMode=yes \
+                          -o StrictHostKeyChecking=yes \
+                          -o ConnectTimeout=10"
+
+                        # Transfer Kubernetes manifests to the agent.
+                        scp $SSH_OPTS -r \
+                          "${WORKSPACE}/${PROJECT_DIR}/k8s" \
+                          "${SSH_USER}@${MINIKUBE_PRIVATE_IP}:/tmp/k8s-${BUILD_NUMBER}"
+
+                        # Apply manifests, update the image, and verify rollout.
+                        ssh $SSH_OPTS \
+                          "${SSH_USER}@${MINIKUBE_PRIVATE_IP}" \
+                          "kubectl apply -n ${K8S_NAMESPACE} -f /tmp/k8s-${BUILD_NUMBER}/ &&
+                           kubectl set image deployment/aws-devops-demo aws-devops-demo=${DOCKER_IMAGE}:${BUILD_NUMBER} -n ${K8S_NAMESPACE} &&
+                           kubectl rollout status deployment/aws-devops-demo -n ${K8S_NAMESPACE} --timeout=180s"
+                    '''
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo 'CI/CD pipeline completed successfully.'
+        }
+
+        failure {
+            echo 'Pipeline failed. Inspect the first failed stage in Console Output.'
+        }
+
+        always {
+            echo 'Pipeline execution finished.'
         }
     }
 }
