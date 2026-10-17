@@ -1,12 +1,12 @@
-name: nodejsproject
+name: Workflow-Diagnostic
 
 on:
+  push:
   workflow_dispatch:
 
 jobs:
-  build:
+  verify:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v6
+      - name: Verify workflow
+        run: echo "GitHub Actions is working!"
