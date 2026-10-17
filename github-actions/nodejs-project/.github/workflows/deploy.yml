@@ -1,0 +1,20 @@
+name: App Build
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  # Trigger the reusable template
+  call-shared-ci:
+    # Syntax: {owner}/{repo}/.github/workflows/{filename}@{ref}
+    uses: RAHAMSHAIK007/gabr1/.github/workflows/enterprise-orchestrator.yml@master
+    with:
+      node-version: '20'
+    secrets:
+      DEPLOY_TOKEN: ${{ secrets.PROD_API_KEY }}
+
+
+
+  
+
