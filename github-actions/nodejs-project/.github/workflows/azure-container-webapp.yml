@@ -1,6 +1,7 @@
 name: nodejsproject
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -9,8 +10,3 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
-
-      - env:
-          TOKEN: ${{ secrets.TOKEN }}
-
-
